@@ -33,7 +33,7 @@ def send_message(message: schemas.MessageCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(new_reply)
 
-    return schemas.MessageResponse(message=schemas.Message.model_validate(new_message), reply=schemas.Message.from_orm(new_reply))
+    return schemas.MessageResponse(message=schemas.Message.model_validate(new_message), reply=schemas.Message.model_validate(new_reply))
 
 
 @app.delete("/delete_message/{message_id}", response_model=schemas.Message)
