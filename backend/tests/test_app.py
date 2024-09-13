@@ -9,7 +9,7 @@ from app import app
 from auth import get_password_hash
 from unittest.mock import patch, MagicMock
 
-SQLALCHEMY_DATABASE_URL = "sqlite:///./chatbot.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:///./test_chatbot.db"
 
 # Create the engine with shared connection across threads
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
