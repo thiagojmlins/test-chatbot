@@ -1,20 +1,28 @@
-import sys
-import os
 import pytest
-from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
-from database import Base
-from app import app, get_db
+from sqlalchemy.engine import Engine
+from fastapi.testclient import TestClient
+from database import Base, get_db
+from models import User  # Make sure User is imported
+from app import app
+from auth import get_password_hash
+from unittest.mock import patch, MagicMock
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+SQLALCHEMY_DATABASE_URL = "sqlite:///./chatbot.db"
 
-# Create a test-specific SQLite database
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_chatbot.db"
+# Create the engine with shared connection across threads
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
+
+# Create a session local for testing
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
-# Override the `get_db` dependency to use the test database
+# Ensure the same connection is used for all database sessions
+@event.listens_for(Engine, "connect")
+def do_connect(dbapi_connection, connection_record):
+    dbapi_connection.isolation_level = None
+
+# Dependency override for FastAPI
 def override_get_db():
     db = TestingSessionLocal()
     try:
@@ -24,44 +32,159 @@ def override_get_db():
 
 app.dependency_overrides[get_db] = override_get_db
 
-# Use the TestClient for making requests to the API
 client = TestClient(app)
 
-# Ensure the test database schema is created before running the tests
-@pytest.fixture(scope="module")
+# Fixture to set up and tear down the test database
+@pytest.fixture(scope="function")
 def setup_database():
-    Base.metadata.create_all(bind=engine)  # Create the test tables
+    # Create the tables before each test
+    Base.metadata.create_all(bind=engine)
     yield
-    Base.metadata.drop_all(bind=engine)  # Drop the tables after tests
+    # Drop the tables after each test
+    Base.metadata.drop_all(bind=engine)
 
-def test_send_message(setup_database):
-    # Test sending a message
-    response = client.post("/send_message", json={"content": "Hello"})
+# Utility function to create a test user
+def create_test_user(db, username="testuser", password="testpassword"):
+    hashed_password = get_password_hash(password)
+    new_user = User(username=username, hashed_password=hashed_password)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+def test_create_user(setup_database):
+    response = client.post(
+        "/users/",
+        json={"username": "john", "password": "secretpassword"}
+    )
+
     assert response.status_code == 200
     data = response.json()
-    assert data["message"]["content"] == "Hello"
-    assert data["reply"]["content"] == "Reply to 'Hello'"
+    assert data["username"] == "john"
 
-def test_get_history(setup_database):
-    # Test retrieving the chat history
+def test_login_for_access_token(setup_database):
+    # First, create a user
+    with TestingSessionLocal() as db:
+        create_test_user(db, "john", "secretpassword")
+
+    # Login to get the token
+    response = client.post(
+        "/token",
+        data={"username": "john", "password": "secretpassword"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert "access_token" in data
+    assert data["token_type"] == "bearer"
+
+def test_protected_route_with_token(setup_database):
+    # First, create a user
+    with TestingSessionLocal() as db:
+        create_test_user(db, "john", "secretpassword")
+
+    # Login to get the token
+    login_response = client.post(
+        "/token",
+        data={"username": "john", "password": "secretpassword"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+
+    access_token = login_response.json()["access_token"]
+
+    # Access the protected route using the token
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = client.get("/history", headers=headers)
+
+    assert response.status_code == 200
+    assert isinstance(response.json(), list)
+
+def test_protected_route_without_token(setup_database):
     response = client.get("/history")
-    assert response.status_code == 200
-    history = response.json()
-    assert len(history) >= 2  # There should be at least the message and its reply
-    assert history[0]["content"] == "Hello"
 
-def test_edit_message(setup_database):
-    # Test editing a message and receiving an updated reply
-    response = client.put("/edit_message/1", json={"content": "Updated message"})
+    assert response.status_code == 401
+    assert response.json() == {"detail": "Not authenticated"}
+
+@patch('chatbot.client.chat.completions.create')
+def test_send_message_with_token(mock_create, setup_database):
+    # Mock the chatbot API response
+    mock_create.return_value = MagicMock(choices=[MagicMock(message=MagicMock(content="This is a mock response"))])
+
+    # First, create a user
+    with TestingSessionLocal() as db:
+        create_test_user(db, "john", "secretpassword")
+
+    # Login to get the token
+    login_response = client.post(
+        "/token",
+        data={"username": "john", "password": "secretpassword"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+
+    access_token = login_response.json()["access_token"]
+
+    # Send a message using the token
+    headers = {"Authorization": f"Bearer {access_token}"}
+    response = client.post("/send_message", json={"content": "Hello, chatbot!"}, headers=headers)
+
     assert response.status_code == 200
     data = response.json()
-    assert data["message"]["content"] == "Updated message"
-    assert data["reply"]["content"] == "Reply to 'Updated message'"
+    assert data["message"]["content"] == "Hello, chatbot!"
+    assert data["reply"]["content"] == "This is a mock response"
 
-def test_delete_message(setup_database):
-    # Test deleting a message
-    response = client.delete("/delete_message/1")
-    assert response.status_code == 200
-    deleted_message = response.json()
-    assert deleted_message["id"] == 1
-    assert deleted_message["content"] == "Updated message"
+@patch('chatbot.client.chat.completions.create')
+def test_edit_message_with_token(mock_create, setup_database):
+    # Mock the chatbot API response
+    mock_create.return_value = MagicMock(choices=[MagicMock(message=MagicMock(content="Updated response"))])
+
+    # First, create a user
+    with TestingSessionLocal() as db:
+        create_test_user(db, "john", "secretpassword")
+
+    # Login to get the token
+    login_response = client.post(
+        "/token",
+        data={"username": "john", "password": "secretpassword"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+
+    access_token = login_response.json()["access_token"]
+
+    # Send a message using the token
+    headers = {"Authorization": f"Bearer {access_token}"}
+    send_response = client.post("/send_message", json={"content": "Hello, chatbot!"}, headers=headers)
+    message_id = send_response.json()["message"]["id"]
+
+    # Edit the message using the token
+    edit_response = client.put(f"/edit_message/{message_id}", json={"content": "Updated content"}, headers=headers)
+
+    assert edit_response.status_code == 200
+    data = edit_response.json()
+    assert data["message"]["content"] == "Updated content"
+    assert data["reply"]["content"] == "Updated response"
+
+def test_delete_message_with_token(setup_database):
+    # First, create a user
+    with TestingSessionLocal() as db:
+        create_test_user(db, "john", "secretpassword")
+
+    # Login to get the token
+    login_response = client.post(
+        "/token",
+        data={"username": "john", "password": "secretpassword"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+
+    access_token = login_response.json()["access_token"]
+
+    # Send a message using the token
+    headers = {"Authorization": f"Bearer {access_token}"}
+    send_response = client.post("/send_message", json={"content": "Message to delete"}, headers=headers)
+    message_id = send_response.json()["message"]["id"]
+
+    # Delete the message using the token
+    delete_response = client.delete(f"/delete_message/{message_id}", headers=headers)
+
+    assert delete_response.status_code == 200
+    assert delete_response.json()["content"] == "Message to delete"
