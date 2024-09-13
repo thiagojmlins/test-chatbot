@@ -1,8 +1,10 @@
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, status, APIRouter
+from fastapi.security import OAuth2PasswordRequestForm
+from datetime import timedelta
 from sqlalchemy.orm import Session
 from typing import List
-
-from database import SessionLocal, engine
+from auth import create_access_token, authenticate_user, get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES, get_password_hash
+from database import get_db, SessionLocal, engine
 import models, schemas, chatbot
 from models import Base
 
@@ -10,17 +12,10 @@ from models import Base
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
-
-# Dependency to get the database session
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
+router = APIRouter()
 
 @app.post("/send_message", response_model=schemas.MessageResponse)
-def send_message(message: schemas.MessageCreate, db: Session = Depends(get_db)):
+def send_message(message: schemas.MessageCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     new_message = models.Message(content=message.content)
     db.add(new_message)
     db.commit()
@@ -37,7 +32,7 @@ def send_message(message: schemas.MessageCreate, db: Session = Depends(get_db)):
 
 
 @app.delete("/delete_message/{message_id}", response_model=schemas.Message)
-def delete_message(message_id: int, db: Session = Depends(get_db)):
+def delete_message(message_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     message = db.query(models.Message).filter(models.Message.id == message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
@@ -48,7 +43,7 @@ def delete_message(message_id: int, db: Session = Depends(get_db)):
 
 
 @app.put("/edit_message/{message_id}", response_model=schemas.MessageResponse)
-def edit_message(message_id: int, message_update: schemas.MessageCreate, db: Session = Depends(get_db)):
+def edit_message(message_id: int, message_update: schemas.MessageCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     message = db.query(models.Message).filter(models.Message.id == message_id).first()
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
@@ -74,6 +69,45 @@ def edit_message(message_id: int, message_update: schemas.MessageCreate, db: Ses
 
 
 @app.get("/history", response_model=List[schemas.Message])
-def get_history(db: Session = Depends(get_db)):
+def get_history(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     messages = db.query(models.Message).all()
     return messages
+
+
+# Authentication-related routes
+
+# Create a user (signup)
+@app.post("/users/", response_model=schemas.UserResponse)
+def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
+    db_user = db.query(models.User).filter(models.User.username == user.username).first()
+    if db_user:
+        raise HTTPException(status_code=400, detail="Username already registered")
+    hashed_password = get_password_hash(user.password)
+    new_user = models.User(username=user.username, hashed_password=hashed_password)
+    db.add(new_user)
+    db.commit()
+    db.refresh(new_user)
+    return new_user
+
+# Get token (login)
+@app.post("/token", response_model=schemas.Token)
+def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(db, form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+# Protected endpoint
+@app.get("/users/me", response_model=schemas.UserResponse)
+def read_users_me(current_user: models.User = Depends(get_current_user)):
+    return current_user
+
+app.include_router(router, dependencies=[Depends(get_current_user)])

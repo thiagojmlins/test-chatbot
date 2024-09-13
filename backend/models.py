@@ -10,3 +10,10 @@ class Message(Base):
     reply_to = Column(Integer, ForeignKey('messages.id'), nullable=True)
 
     replies = relationship("Message", remote_side=[id])
+
+class User(Base):
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String, unique=True, index=True)
+    hashed_password = Column(String)
