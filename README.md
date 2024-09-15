@@ -1,3 +1,8 @@
+# Contents
+
+1. [Backend](#backend)
+2. [Frontend](#frontend)
+
 # Backend
 
 This is an API built using FastAPI. The API allows users to:
@@ -191,3 +196,116 @@ pytest
 ## License
 
 This project is licensed under the MIT license.
+
+
+# Frontend
+
+
+This is the frontend of a chatbot application built using **React** with **TypeScript**, **React Query** for data fetching, **Axios** for HTTP requests, and **React Router** for navigation. The app allows users to sign up, log in, and interact with a chatbot via a chat interface.
+
+## Table of Contents
+
+- [Features](#features)
+- [Technologies](#technologies)
+- [Prerequisites](#prerequisites)
+- [Installation](#installation)
+- [Running the App](#running-the-app)
+- [Project Structure](#project-structure)
+- [API Endpoints](#api-endpoints)
+- [Authentication](#authentication)
+- [Screenshots](#screenshots)
+
+## Features
+
+- User authentication (Sign Up / Log In)
+- Chat interface with real-time updates
+- Auto-redirect to login page when the token is expired
+- Protected routes for chat access
+- Form validation and error handling
+- Bot messages with actionable buttons (e.g., "Create Report", "Call Lead")
+
+## Technologies
+
+- **React** (with **TypeScript**)
+- **React Query** for state management and server data fetching
+- **Axios** for making HTTP requests
+- **Tailwind CSS** for styling
+- **React Router** for page navigation
+- **JWT** (JSON Web Tokens) for authentication and protected routes
+
+## Prerequisites
+
+Before running this project, you should have the following tools installed:
+
+- **Node.js** (>= v14.x)
+- **npm** or **yarn**
+
+## Installation
+
+1. Clone this repository:
+
+   ```bash
+   git clone https://github.com/thiagojmlins/test-chatbot.git
+   cd test-chatbot/frontend
+   ```
+
+2. Install dependencies:
+
+    ```bash
+    npm install
+    ```
+
+## Running the App
+
+To start the development server:
+
+```bash
+npm run dev
+```
+
+This will run the app in development mode. Open http://localhost:5173 to view it in your browser. The app will automatically reload if you make edits.
+
+## Project Structure
+
+Here is an overview of the project structure:
+
+```arduino
+frontend/
+├── public/
+│   ├── index.html
+│   └── ...
+├── src/
+│   ├── components/
+│   │   ├── Chat.tsx
+│   │   ├── Login.tsx
+│   │   ├── SignUp.tsx
+│   │   └── ...
+│   ├── httpClient.ts
+│   ├── App.tsx
+│   ├── index.tsx
+│   └── ...
+├── .env
+├── package.json
+├── tailwind.config.js
+└── README.md
+```
+
+## API Endpoints
+
+The frontend interacts with the following API endpoints:
+
+- User Authentication:
+  - `POST /users/`: Register a new user (Sign Up).
+  - `POST /token`: Log in and retrieve a JWT token.
+
+- Message Management (requires authentication):
+  - `POST /send_message`: Send a message to the bot and receive a reply.
+  - `PUT /edit_message/{message_id}`: Edit an existing message.
+  - `DELETE /delete_message/{message_id}`: Delete a message.
+  - `GET /history`: Retrieve the chat history.
+
+## Authentication
+
+This app uses **JWT (JSON Web Tokens)** for authentication. Upon successful login, the JWT token is stored in **localStorage** and is used for authenticated API requests.
+
+To check if a user is logged in, the app verifies the presence of the token in **localStorage**.
