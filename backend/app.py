@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException, Depends, status, APIRouter
-from fastapi.security import OAuth2PasswordRequestForm
+from logging import getLogger
+from fastapi import FastAPI, HTTPException, Depends, status, APIRouter, Form
+from fastapi.middleware.cors import CORSMiddleware
 from datetime import timedelta
 from sqlalchemy.orm import Session
 from typing import List
@@ -13,6 +14,20 @@ Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 router = APIRouter()
+
+logger = getLogger(__name__)
+
+origins = [
+    "http://localhost:5173",
+]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.post("/send_message", response_model=schemas.MessageResponse)
 def send_message(message: schemas.MessageCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -30,7 +45,6 @@ def send_message(message: schemas.MessageCreate, db: Session = Depends(get_db), 
 
     return schemas.MessageResponse(message=schemas.Message.model_validate(new_message), reply=schemas.Message.model_validate(new_reply))
 
-
 @app.delete("/delete_message/{message_id}", response_model=schemas.Message)
 def delete_message(message_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     message = db.query(models.Message).filter(models.Message.id == message_id).first()
@@ -40,7 +54,6 @@ def delete_message(message_id: int, db: Session = Depends(get_db), current_user:
     db.delete(message)
     db.commit()
     return schemas.Message.model_validate(message)
-
 
 @app.put("/edit_message/{message_id}", response_model=schemas.MessageResponse)
 def edit_message(message_id: int, message_update: schemas.MessageCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
@@ -67,12 +80,10 @@ def edit_message(message_id: int, message_update: schemas.MessageCreate, db: Ses
 
     return schemas.MessageResponse(message=schemas.Message.model_validate(message), reply=schemas.Message.model_validate(new_reply))
 
-
 @app.get("/history", response_model=List[schemas.Message])
 def get_history(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     messages = db.query(models.Message).all()
     return messages
-
 
 # Authentication-related routes
 
@@ -91,8 +102,8 @@ def create_user(user: schemas.UserCreate, db: Session = Depends(get_db)):
 
 # Get token (login)
 @app.post("/token", response_model=schemas.Token)
-def login_for_access_token(db: Session = Depends(get_db), form_data: OAuth2PasswordRequestForm = Depends()):
-    user = authenticate_user(db, form_data.username, form_data.password)
+def login_for_access_token(db: Session = Depends(get_db), username: str = Form(...), password: str = Form(...)):
+    user = authenticate_user(db, username, password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
