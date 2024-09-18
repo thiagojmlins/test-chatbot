@@ -15,3 +15,11 @@ def create_message(db: Session, message: schemas.MessageCreate):
     db.commit()
     db.refresh(new_message)
     return new_message
+
+def create_reply(db: Session, message_content: str, reply_to_id: int):
+    reply_content = chatbot.generate_reply(message_content)
+    new_reply = models.Message(content=reply_content, reply_to=reply_to_id)
+    db.add(new_reply)
+    db.commit()
+    db.refresh(new_reply)
+    return new_reply

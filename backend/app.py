@@ -33,14 +33,14 @@ app.add_middleware(
 @app.post("/send_message", response_model=schemas.MessageResponse)
 def send_message(message: schemas.MessageCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     new_message = services.create_message(db, message)
-    # Simulate chatbot reply
-    reply_content = chatbot.generate_reply(new_message.content)
-    new_reply = models.Message(content=reply_content, reply_to=new_message.id)
-    db.add(new_reply)
-    db.commit()
-    db.refresh(new_reply)
+    new_reply = services.create_reply(
+      db, new_message.content, new_message.id
+    )
 
-    return schemas.MessageResponse(message=schemas.Message.model_validate(new_message), reply=schemas.Message.model_validate(new_reply))
+    return schemas.MessageResponse(
+        message=schemas.Message.model_validate(new_message),
+        reply=schemas.Message.model_validate(new_reply),
+    )
 
 @app.delete("/delete_message/{message_id}", response_model=schemas.Message)
 def delete_message(message_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
