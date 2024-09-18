@@ -5,9 +5,10 @@ from datetime import timedelta
 from sqlalchemy.orm import Session
 from typing import List
 from auth import create_access_token, authenticate_user, get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES, get_password_hash
-from database import get_db, SessionLocal, engine
+from database import get_db, engine
 import models, schemas, chatbot
 from models import Base
+import services
 
 # Create the database tables
 Base.metadata.create_all(bind=engine)
@@ -31,11 +32,7 @@ app.add_middleware(
 
 @app.post("/send_message", response_model=schemas.MessageResponse)
 def send_message(message: schemas.MessageCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    new_message = models.Message(content=message.content)
-    db.add(new_message)
-    db.commit()
-    db.refresh(new_message)
-
+    new_message = services.create_message(db, message)
     # Simulate chatbot reply
     reply_content = chatbot.generate_reply(new_message.content)
     new_reply = models.Message(content=reply_content, reply_to=new_message.id)
