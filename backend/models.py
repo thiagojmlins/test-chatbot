@@ -8,7 +8,9 @@ class Message(Base):
     id = Column(Integer, primary_key=True, index=True)
     content = Column(String, nullable=False)
     reply_to = Column(Integer, ForeignKey('messages.id'), nullable=True)
+    user_id = Column(Integer, ForeignKey('users.id'), nullable=False)
 
+    user = relationship('User', back_populates='messages')
     replies = relationship("Message", remote_side=[id])
 
 class User(Base):
@@ -17,3 +19,5 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
+
+    messages = relationship('Message', back_populates='user')
