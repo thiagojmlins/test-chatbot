@@ -9,8 +9,8 @@ from auth import (
     get_password_hash,
 )
 
-def create_message(db: Session, message: schemas.MessageCreate):
-    new_message = models.Message(content=message.content)
+def create_message(db: Session, message: schemas.MessageCreate, user_id: int):
+    new_message = models.Message(content=message.content, user_id=user_id)
     db.add(new_message)
     db.commit()
     db.refresh(new_message)
@@ -49,6 +49,10 @@ def get_message_reply(db: Session, message_id: int):
 
 def get_all_messages(db: Session):
     messages = db.query(models.Message).all()
+    return messages
+
+def get_user_messages(db: Session, user_id: int):
+    messages = db.query(models.Message).filter(models.Message.user_id == user_id).all()
     return messages
 
 def create_new_user(db: Session, user: schemas.UserCreate):
