@@ -1,10 +1,9 @@
 from logging import getLogger
-from fastapi import FastAPI, HTTPException, Depends, status, APIRouter, Form
+from fastapi import FastAPI, Depends, APIRouter, Form
 from fastapi.middleware.cors import CORSMiddleware
-from datetime import timedelta
 from sqlalchemy.orm import Session
 from typing import List
-from auth import create_access_token, authenticate_user, get_current_user, ACCESS_TOKEN_EXPIRE_MINUTES, get_password_hash
+from auth import get_current_user
 from database import get_db, engine
 import models, schemas, chatbot
 from models import Base
@@ -32,7 +31,7 @@ app.add_middleware(
 
 @app.post("/send_message", response_model=schemas.MessageResponse)
 def send_message(message: schemas.MessageCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    new_message = services.create_message(db, message)
+    new_message = services.create_message(db, message, current_user.id)
     new_reply = services.create_reply(
       db, new_message.content, new_message.id
     )
@@ -44,12 +43,12 @@ def send_message(message: schemas.MessageCreate, db: Session = Depends(get_db), 
 
 @app.delete("/delete_message/{message_id}", response_model=schemas.Message)
 def delete_message(message_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    message = services.delete_message_by_id(db, message_id)
+    message = services.delete_message_by_id(db, message_id, current_user.id)
     return schemas.Message.model_validate(message)
 
 @app.put("/edit_message/{message_id}", response_model=schemas.MessageResponse)
 def edit_message(message_id: int, message_update: schemas.MessageCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    message = services.update_message(db, message_id, message_update.content)
+    message = services.update_message(db, message_id, current_user.id, message_update.content)
     new_reply_content = chatbot.generate_reply(message.content)
     new_reply = services.get_message_reply(db, message_id)
     if new_reply:
@@ -65,7 +64,7 @@ def edit_message(message_id: int, message_update: schemas.MessageCreate, db: Ses
 
 @app.get("/history", response_model=List[schemas.Message])
 def get_history(db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    messages = services.get_all_messages(db)
+    messages = services.get_user_messages(db, current_user.id)
     return messages
 
 # Authentication-related routes
