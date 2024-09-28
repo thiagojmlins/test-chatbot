@@ -12,21 +12,32 @@ from auth import (
 
 class ChatService:
     @staticmethod
-    def create_message(db: Session, content: str, user_id: int):
-        new_message = models.Message(user_id=user_id, content=content, is_from_user=True)
-        db.add(new_message)
+    def create_message(db: Session, user_id: int, content: str):
+        # Create the user's message
+        user_message = models.Message(
+            user_id=user_id,
+            content=content,
+            is_from_user=True
+        )
+        db.add(user_message)
         db.commit()
-        db.refresh(new_message)
-        return new_message
+        db.refresh(user_message)
 
-    @staticmethod
-    def create_reply(db: Session, user_id: int, message_content: str, reply_to_id: int):
-        reply_content = chatbot.generate_reply(message_content)
-        new_reply = models.Message(user_id=user_id, content=reply_content, reply_to=reply_to_id, is_from_user=False)
-        db.add(new_reply)
+        # Generate a reply using the chatbot
+        reply_content = chatbot.generate_reply(content)
+
+        # Create the chatbot's reply
+        chatbot_reply = models.Message(
+            user_id=user_id,
+            content=reply_content,
+            is_from_user=False,
+            reply_to=user_message.id
+        )
+        db.add(chatbot_reply)
         db.commit()
-        db.refresh(new_reply)
-        return new_reply
+        db.refresh(chatbot_reply)
+
+        return user_message, chatbot_reply
 
     @staticmethod
     def delete_message(db: Session, user_id: int, message_id: int):

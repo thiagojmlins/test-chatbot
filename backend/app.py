@@ -45,10 +45,7 @@ async def http_exception_handler(request, exc):
 # Message routes
 @message_router.post("/", response_model=schemas.MessageResponse)
 def send_message(message: schemas.MessageCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
-    new_message = ChatService.create_message(db, message.content, current_user.id)
-    new_reply = ChatService.create_reply(
-      db, current_user.id, new_message.content, new_message.id
-    )
+    new_message, new_reply = ChatService.create_message(db, current_user.id, message.content)
 
     return schemas.MessageResponse(
         message=schemas.Message.model_validate(new_message),

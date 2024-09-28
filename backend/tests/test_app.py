@@ -4,10 +4,11 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.engine import Engine
 from fastapi.testclient import TestClient
 from database import Base, get_db
-from models import User  # Make sure User is imported
+from models import User, Message
 from app import app
 from auth import get_password_hash
-from unittest.mock import patch, MagicMock
+from services import ChatService
+from unittest.mock import patch, MagicMock, ANY
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test_chatbot.db"
 
@@ -43,6 +44,27 @@ def setup_database():
     # Drop the tables after each test
     Base.metadata.drop_all(bind=engine)
 
+@pytest.fixture
+def authenticated_client(setup_database):
+    # Create a user
+    with TestingSessionLocal() as db:
+        user = create_test_user(db, "john", "secretpassword")
+
+    # Login to get the token
+    response = client.post(
+        "/token",
+        data={"username": "john", "password": "secretpassword"},
+        headers={"Content-Type": "application/x-www-form-urlencoded"}
+    )
+
+    access_token = response.json()["access_token"]
+
+    # Create a new TestClient with the authentication header
+    authenticated_client = TestClient(app)
+    authenticated_client.headers = {"Authorization": f"Bearer {access_token}"}
+
+    return {"client": authenticated_client, "user_id": user.id}
+
 # Utility function to create a test user
 def create_test_user(db, username="testuser", password="testpassword"):
     hashed_password = get_password_hash(password)
@@ -62,13 +84,8 @@ def test_create_user(setup_database):
     data = response.json()
     assert data["username"] == "john"
 
-def test_login_for_access_token(setup_database):
-    # First, create a user
-    with TestingSessionLocal() as db:
-        create_test_user(db, "john", "secretpassword")
-
-    # Login to get the token
-    response = client.post(
+def test_login_for_access_token(setup_database, authenticated_client):
+    response = authenticated_client["client"].post(
         "/token",
         data={"username": "john", "password": "secretpassword"},
         headers={"Content-Type": "application/x-www-form-urlencoded"}
@@ -79,112 +96,84 @@ def test_login_for_access_token(setup_database):
     assert "access_token" in data
     assert data["token_type"] == "bearer"
 
-def test_protected_route_with_token(setup_database):
-    # First, create a user
-    with TestingSessionLocal() as db:
-        create_test_user(db, "john", "secretpassword")
-
-    # Login to get the token
-    login_response = client.post(
-        "/token",
-        data={"username": "john", "password": "secretpassword"},
-        headers={"Content-Type": "application/x-www-form-urlencoded"}
-    )
-
-    access_token = login_response.json()["access_token"]
-
-    # Access the protected route using the token
-    headers = {"Authorization": f"Bearer {access_token}"}
-    response = client.get("/history", headers=headers)
-
+def test_protected_route_with_token(authenticated_client):
+    response = authenticated_client["client"].get("/users/me")
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
+    assert "username" in response.json()
 
 def test_protected_route_without_token(setup_database):
-    response = client.get("/history")
+    response = client.get("/users/me")
 
     assert response.status_code == 401
-    assert response.json() == {"detail": "Not authenticated"}
+    assert response.json() == {"message": "Not authenticated"}
 
-@patch('chatbot.client.chat.completions.create')
-def test_send_message_with_token(mock_create, setup_database):
-    # Mock the chatbot API response
-    mock_create.return_value = MagicMock(choices=[MagicMock(message=MagicMock(content="This is a mock response"))])
-
-    # First, create a user
-    with TestingSessionLocal() as db:
-        create_test_user(db, "john", "secretpassword")
-
-    # Login to get the token
-    login_response = client.post(
-        "/token",
-        data={"username": "john", "password": "secretpassword"},
-        headers={"Content-Type": "application/x-www-form-urlencoded"}
+@patch.object(ChatService, 'create_message')
+def test_send_message_with_token(mock_create_message, authenticated_client):
+    mock_create_message.return_value = (
+        Message(id=1, user_id=authenticated_client["user_id"], content="Hello, chatbot!", is_from_user=True, reply_to=None),
+        Message(id=2, user_id=authenticated_client["user_id"], content="This is a mock response", is_from_user=False, reply_to=1)
     )
 
-    access_token = login_response.json()["access_token"]
-
-    # Send a message using the token
-    headers = {"Authorization": f"Bearer {access_token}"}
-    response = client.post("/send_message", json={"content": "Hello, chatbot!"}, headers=headers)
+    response = authenticated_client["client"].post("/messages/", json={"content": "Hello, chatbot!"})
 
     assert response.status_code == 200
     data = response.json()
     assert data["message"]["content"] == "Hello, chatbot!"
     assert data["reply"]["content"] == "This is a mock response"
 
-@patch('chatbot.client.chat.completions.create')
-def test_edit_message_with_token(mock_create, setup_database):
-    # Mock the chatbot API response
-    mock_create.return_value = MagicMock(choices=[MagicMock(message=MagicMock(content="Updated response"))])
+    mock_create_message.assert_called_once_with(ANY, authenticated_client["user_id"], "Hello, chatbot!")
 
-    # First, create a user
-    with TestingSessionLocal() as db:
-        create_test_user(db, "john", "secretpassword")
-
-    # Login to get the token
-    login_response = client.post(
-        "/token",
-        data={"username": "john", "password": "secretpassword"},
-        headers={"Content-Type": "application/x-www-form-urlencoded"}
+@patch.object(ChatService, 'edit_message_and_update_reply')
+def test_edit_message_with_token(mock_edit_message, authenticated_client):
+    mock_edit_message.return_value = (
+        Message(id=1, user_id=authenticated_client["user_id"], content="Updated content", is_from_user=True, reply_to=None),
+        Message(id=2, user_id=authenticated_client["user_id"], content="Updated response", is_from_user=False, reply_to=1)
     )
 
-    access_token = login_response.json()["access_token"]
+    # Create a message first
+    with TestingSessionLocal() as db:
+        message = Message(user_id=authenticated_client["user_id"], content="Original content", is_from_user=True)
+        db.add(message)
+        db.commit()
+        db.refresh(message)
 
-    # Send a message using the token
-    headers = {"Authorization": f"Bearer {access_token}"}
-    send_response = client.post("/send_message", json={"content": "Hello, chatbot!"}, headers=headers)
-    message_id = send_response.json()["message"]["id"]
+    response = authenticated_client["client"].put(
+        f"/messages/{message.id}",
+        json={"content": "Updated content"}
+    )
 
-    # Edit the message using the token
-    edit_response = client.put(f"/edit_message/{message_id}", json={"content": "Updated content"}, headers=headers)
-
-    assert edit_response.status_code == 200
-    data = edit_response.json()
+    assert response.status_code == 200
+    data = response.json()
     assert data["message"]["content"] == "Updated content"
     assert data["reply"]["content"] == "Updated response"
 
-def test_delete_message_with_token(setup_database):
-    # First, create a user
+    mock_edit_message.assert_called_once_with(ANY, authenticated_client["user_id"], message.id, "Updated content")
+
+@patch.object(ChatService, 'delete_message')
+def test_delete_message_with_token(mock_delete_message, authenticated_client):
+    mock_delete_message.return_value = Message(id=1, user_id=authenticated_client["user_id"], content="Message to delete", is_from_user=True)
+
+    # Create a message first
     with TestingSessionLocal() as db:
-        create_test_user(db, "john", "secretpassword")
+        message = Message(user_id=authenticated_client["user_id"], content="Message to delete", is_from_user=True)
+        db.add(message)
+        db.commit()
+        db.refresh(message)
 
-    # Login to get the token
-    login_response = client.post(
-        "/token",
-        data={"username": "john", "password": "secretpassword"},
-        headers={"Content-Type": "application/x-www-form-urlencoded"}
-    )
+    response = authenticated_client["client"].delete(f"/messages/{message.id}")
 
-    access_token = login_response.json()["access_token"]
+    assert response.status_code == 200
+    assert response.json() == {
+        "id": 1,
+        "user_id": authenticated_client["user_id"],
+        "content": "Message to delete",
+        "is_from_user": True,
+        "reply_to": None
+    }
 
-    # Send a message using the token
-    headers = {"Authorization": f"Bearer {access_token}"}
-    send_response = client.post("/send_message", json={"content": "Message to delete"}, headers=headers)
-    message_id = send_response.json()["message"]["id"]
+    mock_delete_message.assert_called_once_with(ANY, authenticated_client["user_id"], message.id)
 
-    # Delete the message using the token
-    delete_response = client.delete(f"/delete_message/{message_id}", headers=headers)
 
-    assert delete_response.status_code == 200
-    assert delete_response.json()["content"] == "Message to delete"
+
+
+
