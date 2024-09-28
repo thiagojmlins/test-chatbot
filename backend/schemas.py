@@ -9,6 +9,8 @@ class MessageCreate(MessageBase):
 
 class Message(MessageBase):
     id: int
+    user_id: int
+    is_from_user: bool
     reply_to: Optional[int] = None
 
     class Config:
