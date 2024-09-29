@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { FiSend } from 'react-icons/fi';
-import { useMutation } from 'react-query';
+import { useMutation, useQueryClient, useQuery } from 'react-query';
 import httpClient from '../httpClient';
 
 
@@ -13,25 +13,23 @@ interface ChatMessage {
 }
 
 const Chat = () => {
-  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const queryClient = useQueryClient();
   const [message, setMessage] = useState('');
   const [editMessageId, setEditMessageId] = useState<string | null>(
     null
   );
   const [editedContent, setEditedContent] = useState('');
 
-  useEffect(() => {
-    fetchChatHistory();
-  }, []);
-
-  const fetchChatHistory = async () => {
-    try {
-      const response = await httpClient.get('/messages/history');
-      setChatHistory(response.data);
-    } catch (error) {
-      console.error('Failed to fetch chat history');
+  // Get chat history
+  const { data: chatHistory, refetch: refetchChatHistory, isLoading, error } = useQuery('chatHistory', () =>
+    httpClient.get('/messages/history').then((res) => res.data), {
+      enabled: true,
     }
-  };
+  );
+
+  useEffect(() => {
+    refetchChatHistory();
+  }, [refetchChatHistory]);
 
   // Send message mutation
   const sendMessageMutation = useMutation(
@@ -96,6 +94,14 @@ const Chat = () => {
       });
     }
   };
+
+  if (isLoading) {
+    return <div>Loading...</div>;
+  }
+
+  if (error) {
+    return <div>Error while fetching chat history!</div>;
+  }
 
   return (
     <div className="max-w-lg mx-auto max-h-screen bg-white shadow-lg rounded-lg flex flex-col">
