@@ -78,7 +78,7 @@ class ChatService:
 
     @staticmethod
     def get_messages_paginated(db: Session, user_id: int, skip: int = 0, limit: int = 10):
-        messages = db.query(models.Message).filter(models.Message.user_id == user_id).order_by(desc(models.Message.id)).offset(skip).limit(limit).all()
+        messages = db.query(models.Message).filter(models.Message.user_id == user_id).order_by((models.Message.id)).offset(skip).limit(limit).all()
         return messages
 
     @staticmethod

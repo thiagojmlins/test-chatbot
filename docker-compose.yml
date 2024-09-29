@@ -5,6 +5,8 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
+    volumes:
+      - ./backend:/app
     environment:
       - SECRET_KEY=${SECRET_KEY}
       - ALGORITHM=${ALGORITHM}
@@ -13,13 +15,22 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    command: uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+    networks:
+      - app-network
 
   frontend:
     build: ./frontend
     ports:
       - "5173:5173"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
     depends_on:
       - backend
+    command: npm run dev
+    networks:
+      - app-network
 
   db:
     image: postgres:13
@@ -34,6 +45,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - app-network
+
+networks:
+  app-network:
+    driver: bridge
 
 volumes:
   postgres_data:
