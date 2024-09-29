@@ -15,7 +15,7 @@ const Login = () => {
     try {
       const response = await httpClient.post('/token', formData);
       localStorage.setItem('token', response.data.access_token);
-      navigate('/chat'); // Redirect to chat after successful login
+      navigate('/');
     } catch (error) {
       console.error('Login failed', error);
     }

@@ -1,32 +1,42 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { FiSend } from 'react-icons/fi';
-import { useQuery, useMutation, useQueryClient } from 'react-query';
+import { useMutation } from 'react-query';
 import httpClient from '../httpClient';
 
-// Fetch chat history (mockup)
-const fetchChatHistory = async () => {
-  const response = await httpClient.get('/history');
-  return response.data;
-};
+
+interface ChatMessage {
+  id: number;
+  content: string;
+  reply_to: number | null;
+  is_from_user: boolean;
+  buttons: string[];
+}
 
 const Chat = () => {
-  const queryClient = useQueryClient();
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [message, setMessage] = useState('');
   const [editMessageId, setEditMessageId] = useState<string | null>(
     null
   );
   const [editedContent, setEditedContent] = useState('');
 
-  // Fetch chat history
-  const { data: chatHistory } = useQuery(
-    'chatHistory',
-    fetchChatHistory
-  );
+  useEffect(() => {
+    fetchChatHistory();
+  }, []);
+
+  const fetchChatHistory = async () => {
+    try {
+      const response = await httpClient.get('/messages/history');
+      setChatHistory(response.data);
+    } catch (error) {
+      console.error('Failed to fetch chat history');
+    }
+  };
 
   // Send message mutation
   const sendMessageMutation = useMutation(
     (newMessage: string) =>
-      httpClient.post('/send_message', { content: newMessage }),
+      httpClient.post('/messages', { content: newMessage }),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('chatHistory');
@@ -37,7 +47,7 @@ const Chat = () => {
   // Delete message mutation
   const deleteMessageMutation = useMutation(
     (messageId: string) =>
-      httpClient.delete(`/delete_message/${messageId}`),
+      httpClient.delete(`/messages/${messageId}`),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('chatHistory');
@@ -53,7 +63,7 @@ const Chat = () => {
     }: {
       messageId: string;
       content: string;
-    }) => httpClient.put(`/edit_message/${messageId}`, { content }),
+    }) => httpClient.put(`/messages/${messageId}`, { content }),
     {
       onSuccess: () => {
         queryClient.invalidateQueries('chatHistory');
@@ -106,15 +116,15 @@ const Chat = () => {
 
       {/* Chat Body */}
       <div className="p-4 space-y-4 h-96 overflow-y-auto flex-1">
-        {chatHistory?.map((chat: any, index: number) => (
+        {chatHistory?.map((chat: ChatMessage, index: number) => (
           <div
             key={index}
             className={`flex ${
-              chat.reply_to === null ? 'justify-end' : 'justify-start'
+              chat.is_from_user ? 'justify-end' : 'justify-start'
             } group`} // Added group class here
           >
             {/* Avatar for bot messages */}
-            {chat.reply_to !== null && (
+            {!chat.is_from_user && (
               <img
                 src="https://randomuser.me/api/portraits/women/44.jpg"
                 alt="Bot Avatar"
@@ -124,13 +134,13 @@ const Chat = () => {
 
             <div
               className={`relative max-w-xs p-3 rounded-2xl ${
-                chat.reply_to === null
+                chat.is_from_user
                   ? 'bg-purple-500 text-white rounded-br-none float-right'
                   : 'bg-gray-100 text-black rounded-bl-none float-left'
               }`}
             >
               {/* Message Content */}
-              {editMessageId === chat.id ? (
+              {editMessageId === chat.id.toString() ? (
                 <div className="relative">
                   <input
                     type="text"
@@ -140,7 +150,7 @@ const Chat = () => {
                   />
                   <button
                     className="mt-2 bg-blue-500 text-white p-2 rounded"
-                    onClick={() => handleSaveEdit(chat.id)}
+                    onClick={() => handleSaveEdit(chat.id.toString())}
                   >
                     Save
                   </button>
@@ -151,7 +161,7 @@ const Chat = () => {
                     {chat.content}
                   </p>
                   {/* Optional bot buttons */}
-                  {chat.reply_to === null &&
+                  {!chat.is_from_user &&
                     chat.buttons &&
                     chat.buttons.length > 0 && (
                       <div className="mt-2 space-y-2">
@@ -169,21 +179,20 @@ const Chat = () => {
                     )}
 
                   {/* Edit/Delete buttons on user messages */}
-                  {chat.reply_to === null && (
+                  {chat.is_from_user && (
                     <div className="absolute top-1 right-1 hidden group-hover:flex space-x-2">
                       {' '}
-                      {/* group-hover class */}
                       <button
                         className="text-xs bg-yellow-500 text-white p-1 rounded"
                         onClick={() =>
-                          handleEditMessage(chat.id, chat.content)
+                          handleEditMessage(chat.id.toString(), chat.content)
                         }
                       >
                         Edit
                       </button>
                       <button
                         className="text-xs bg-red-500 text-white p-1 rounded"
-                        onClick={() => handleDeleteMessage(chat.id)}
+                        onClick={() => handleDeleteMessage(chat.id.toString())}
                       >
                         Delete
                       </button>
@@ -194,7 +203,7 @@ const Chat = () => {
             </div>
 
             {/* User Avatar */}
-            {chat.reply_to === null && (
+            {chat.is_from_user && (
               <img
                 src="https://randomuser.me/api/portraits/men/45.jpg"
                 alt="User Avatar"
