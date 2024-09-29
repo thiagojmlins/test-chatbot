@@ -187,7 +187,13 @@ const UserAvatar = () => (
   />
 );
 
-const EditMessageForm = ({ editedContent, setEditedContent, handleSaveEdit }) => (
+interface EditMessageFormProps {
+  editedContent: string;
+  setEditedContent: (content: string) => void;
+  handleSaveEdit: () => void;
+}
+
+const EditMessageForm: React.FC<EditMessageFormProps> = ({ editedContent, setEditedContent, handleSaveEdit }) => (
   <div className="relative">
     <input
       type="text"
@@ -238,7 +244,13 @@ const MessageContent = ({ chat, handleEditMessage, handleDeleteMessage }) => (
   </>
 );
 
-const MessageInput = ({ message, setMessage, handleSendMessage }) => (
+interface MessageInputProps {
+  message: string;
+  setMessage: (message: string) => void;
+  handleSendMessage: () => void;
+}
+
+const MessageInput: React.FC<MessageInputProps> = ({ message, setMessage, handleSendMessage }) => (
   <div className="flex items-center p-4 border-t border-gray-200">
     <UserAvatar />
     <input
