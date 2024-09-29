@@ -45,6 +45,9 @@ class ChatService:
         if not message:
             raise HTTPException(status_code=404, detail="Message not found")
 
+        # Delete the reply to the message
+        db.query(models.Message).filter(models.Message.reply_to == message_id).delete()
+
         db.delete(message)
         db.commit()
         return message
