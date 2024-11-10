@@ -200,6 +200,7 @@ const EditMessageForm: React.FC<EditMessageFormProps> = ({ editedContent, setEdi
       value={editedContent}
       onChange={(e) => setEditedContent(e.target.value)}
       className="w-full p-2 border rounded text-black"
+      data-testid="edit-message-input"
     />
     <button
       className="mt-2 bg-blue-500 text-white p-2 rounded"
@@ -230,6 +231,7 @@ const MessageContent = ({ chat, handleEditMessage, handleDeleteMessage }) => (
         <button
           className="text-xs bg-yellow-500 text-white p-1 rounded"
           onClick={() => handleEditMessage(chat.id.toString(), chat.content)}
+          data-testid="edit-button"
         >
           Edit
         </button>
@@ -259,8 +261,13 @@ const MessageInput: React.FC<MessageInputProps> = ({ message, setMessage, handle
       onChange={(e) => setMessage(e.target.value)}
       placeholder="Your question"
       className="flex-1 border border-gray-300 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500"
+      data-testid="new-message-input"
     />
-    <button onClick={handleSendMessage} className="ml-3 text-purple-500">
+    <button
+      onClick={handleSendMessage}
+      className="ml-3 text-purple-500"
+      data-testid="send-button"
+    >
       <FiSend className="w-6 h-6" />
     </button>
   </div>
