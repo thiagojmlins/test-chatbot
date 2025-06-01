@@ -1,9 +1,10 @@
 import os
+import psycopg
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 # Default to PostgreSQL for production
-SQLALCHEMY_DATABASE_URL = "postgresql://postgres:postgres@db:5432/chatbot"
+SQLALCHEMY_DATABASE_URL = "postgresql+psycopg://postgres:postgres@db:5432/chatbot"
 
 # Allow override for testing
 if os.getenv("TESTING"):
