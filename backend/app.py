@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from core.auth import get_current_user
 from core.exceptions import ChatbotException
 from core.responses import handle_exception_response, internal_server_error_response
+from core.config import CORS_ORIGINS
 from database import get_db, engine
 from services.auth import AuthService
 from routers.messages import router as message_router
@@ -19,14 +20,9 @@ app = FastAPI()
 
 logger = getLogger(__name__)
 
-origins = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173"
-]
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=CORS_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
