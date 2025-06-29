@@ -108,7 +108,7 @@ def test_protected_route_without_token(setup_database):
     response = client.get("/users/me")
 
     assert response.status_code == 401
-    assert response.json() == {"message": "Not authenticated"}
+    assert response.json() == {"error": {"message": "Not authenticated", "status_code": 401}}
 
 @patch.object(ChatService, 'create_message')
 def test_send_message_with_token(mock_create_message, authenticated_client):
@@ -175,6 +175,41 @@ def test_delete_message_with_token(mock_delete_message, authenticated_client):
     }
 
     mock_delete_message.assert_called_once_with(ANY, authenticated_client["user_id"], message.id)
+
+def test_duplicate_user_creation(setup_database):
+    """Test that creating a user with duplicate username returns proper error."""
+    # Create first user
+    response1 = client.post(
+        "/users/",
+        json={"username": "john", "password": "secretpassword"}
+    )
+    assert response1.status_code == 200
+
+    # Try to create duplicate user
+    response2 = client.post(
+        "/users/",
+        json={"username": "john", "password": "differentpassword"}
+    )
+    
+    assert response2.status_code == 400
+    assert response2.json() == {
+        "error": {
+            "message": "Username 'john' is already registered",
+            "status_code": 400
+        }
+    }
+
+def test_message_not_found(authenticated_client):
+    """Test that accessing non-existent message returns proper error."""
+    response = authenticated_client["client"].delete("/messages/999")
+    
+    assert response.status_code == 404
+    assert response.json() == {
+        "error": {
+            "message": "Message with id 999 not found",
+            "status_code": 404
+        }
+    }
 
 
 
