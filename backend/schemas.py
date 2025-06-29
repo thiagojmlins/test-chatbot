@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import Optional
 
 class MessageBase(BaseModel):
@@ -12,9 +12,7 @@ class Message(MessageBase):
     user_id: int
     is_from_user: bool
     reply_to: Optional[int] = None
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class MessageResponse(BaseModel):
     message: Message
@@ -31,9 +29,7 @@ class UserInDB(UserBase):
 
 class UserResponse(UserBase):
     id: int
-
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 class Token(BaseModel):
     access_token: str

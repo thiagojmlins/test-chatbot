@@ -9,8 +9,8 @@ from fastapi.testclient import TestClient
 from database import Base, get_db
 from models import User, Message
 from app import app
-from auth import get_password_hash
-from services import ChatService
+from core.auth import get_password_hash
+from services.chat import ChatService
 from unittest.mock import patch, MagicMock, ANY
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///./test_chatbot.db"

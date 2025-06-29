@@ -1,19 +1,10 @@
-from sqlalchemy import desc
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
-import models, schemas, chatbot
-from datetime import timedelta
-from auth import (
-    create_access_token,
-    authenticate_user,
-    ACCESS_TOKEN_EXPIRE_MINUTES,
-    get_password_hash,
-)
+from fastapi import HTTPException
+import models, chatbot
 
 class ChatService:
     @staticmethod
     def create_message(db: Session, user_id: int, content: str):
-        # Create the user's message
         user_message = models.Message(
             user_id=user_id,
             content=content,
@@ -23,10 +14,7 @@ class ChatService:
         db.commit()
         db.refresh(user_message)
 
-        # Generate a reply using the chatbot
         reply_content = chatbot.generate_reply(content)
-
-        # Create the chatbot's reply
         chatbot_reply = models.Message(
             user_id=user_id,
             content=reply_content,
@@ -44,10 +32,7 @@ class ChatService:
         message = db.query(models.Message).filter(models.Message.id == message_id, models.Message.user_id == user_id).first()
         if not message:
             raise HTTPException(status_code=404, detail="Message not found")
-
-        # Delete the reply to the message
         db.query(models.Message).filter(models.Message.reply_to == message_id).delete()
-
         db.delete(message)
         db.commit()
         return message
@@ -57,21 +42,17 @@ class ChatService:
         message = db.query(models.Message).filter(models.Message.id == message_id, models.Message.user_id == user_id).first()
         if not message:
             raise HTTPException(status_code=404, detail="Message not found")
-
         message.content = new_content
         db.commit()
         db.refresh(message)
-
         new_reply_content = chatbot.generate_reply(message.content)
         reply = ChatService.get_message_reply(db, message_id)
-
         if reply:
             reply.content = new_reply_content
             db.commit()
             db.refresh(reply)
         else:
             reply = ChatService.create_reply(db, new_reply_content, message_id)
-
         return message, reply
 
     @staticmethod
@@ -82,31 +63,4 @@ class ChatService:
     @staticmethod
     def get_messages_paginated(db: Session, user_id: int, skip: int = 0, limit: int = 10):
         messages = db.query(models.Message).filter(models.Message.user_id == user_id).order_by((models.Message.id)).offset(skip).limit(limit).all()
-        return messages
-
-    @staticmethod
-    def create_new_user(db: Session, user: schemas.UserCreate):
-        db_user = db.query(models.User).filter(models.User.username == user.username).first()
-        if db_user:
-            raise HTTPException(status_code=400, detail="Username already registered")
-        hashed_password = get_password_hash(user.password)
-        new_user = models.User(username=user.username, hashed_password=hashed_password)
-        db.add(new_user)
-        db.commit()
-        db.refresh(new_user)
-        return new_user
-
-    @staticmethod
-    def authenticate_and_create_token(db: Session, username: str, password: str):
-        user = authenticate_user(db, username, password)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Incorrect username or password",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        access_token = create_access_token(
-            data={"sub": user.username}, expires_delta=access_token_expires
-        )
-        return {"access_token": access_token, "token_type": "bearer"}
+        return messages 
