@@ -1,6 +1,3 @@
-import os
-os.environ["TESTING"] = "1"
-
 import pytest
 from sqlalchemy import create_engine, event
 from sqlalchemy.orm import sessionmaker
@@ -10,10 +7,9 @@ from database import Base, get_db
 from models import User, Message
 from app import app
 from core.auth import get_password_hash
+from core.config import SQLALCHEMY_DATABASE_URL
 from services.chat import ChatService
 from unittest.mock import patch, MagicMock, ANY
-
-SQLALCHEMY_DATABASE_URL = "sqlite:///./test_chatbot.db"
 
 # Create the engine with shared connection across threads
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False})
