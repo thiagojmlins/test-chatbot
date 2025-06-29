@@ -1,14 +1,10 @@
-import os
 import psycopg
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
+from core.config import SQLALCHEMY_DATABASE_URL, TESTING
 
-# Default to PostgreSQL for production
-SQLALCHEMY_DATABASE_URL = "postgresql+psycopg://postgres:postgres@db:5432/chatbot"
-
-# Allow override for testing
-if os.getenv("TESTING"):
-    SQLALCHEMY_DATABASE_URL = "sqlite:///./test_chatbot.db"
+# Create engine based on centralized configuration
+if TESTING:
     engine = create_engine(
         SQLALCHEMY_DATABASE_URL, connect_args={"check_same_thread": False}
     )
