@@ -33,6 +33,13 @@ jobs:
     name: Backend Tests
     runs-on: ubuntu-latest
 
+    env:
+      TESTING: "1"
+      SECRET_KEY: "test-secret-key-for-ci"
+      API_KEY: "test-api-key-for-ci"
+      ALGORITHM: "HS256"
+      ACCESS_TOKEN_EXPIRE_MINUTES: "30"
+
     steps:
     - uses: actions/checkout@v4
 
@@ -41,6 +48,7 @@ jobs:
       with:
         python-version: '3.11'
         cache: 'pip'
+        cache-dependency-path: './backend/requirements.txt'
 
     - name: Install dependencies
       working-directory: ./backend
@@ -48,6 +56,12 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
+    - name: Verify configuration
+      working-directory: ./backend
+      run: |
+        python -c "from core.config import *; print('Configuration loaded successfully')"
+        python -c "import database; print('Database module imported successfully')"
+
     - name: Run tests
       working-directory: ./backend
-      run: python -m pytest
+      run: python -m pytest tests/ -v --tb=short
