@@ -1,17 +1,14 @@
-import os
 import openai
-from dotenv import load_dotenv
 from openai import OpenAI
+from core.config import API_KEY, API_MODEL
 
-load_dotenv()
-
-client = OpenAI(api_key=os.environ.get("API_KEY"))
+client = OpenAI(api_key=API_KEY)
 
 def generate_reply(message_content: str) -> str:
     try:
         # Call the OpenAI API with the message content
         response = client.chat.completions.create(
-            model=os.environ.get("API_MODEL"),
+            model=API_MODEL,
             messages=[
                 {"role": "user", "content": message_content}
             ]
