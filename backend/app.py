@@ -5,18 +5,21 @@ from fastapi.responses import JSONResponse
 from core.auth import get_current_user
 from core.exceptions import ChatbotException
 from core.responses import handle_exception_response, internal_server_error_response
-from core.config import CORS_ORIGINS
-from database import get_db, engine
+from core.config import CORS_ORIGINS, APP_NAME, APP_VERSION
+from database import get_db, init_db, close_db, DatabaseManager
 from services.auth import AuthService
 from routers.messages import router as message_router
 from routers.users import router as user_router
 import models, schemas
-from models import Base
 
-# Create the database tables
-Base.metadata.create_all(bind=engine)
+# Initialize the database tables
+init_db()
 
-app = FastAPI()
+app = FastAPI(
+    title=APP_NAME,
+    version=APP_VERSION,
+    description="A modern chatbot API with improved database management"
+)
 
 logger = getLogger(__name__)
 
@@ -49,6 +52,26 @@ async def general_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
     return internal_server_error_response("An unexpected error occurred")
 
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint to verify API and database status."""
+    db_healthy = DatabaseManager.health_check()
+    connection_info = DatabaseManager.get_connection_info()
+    
+    return {
+        "status": "healthy" if db_healthy else "unhealthy",
+        "database": {
+            "status": "connected" if db_healthy else "disconnected",
+            "connection_pool": connection_info
+        },
+        "api": {
+            "name": APP_NAME,
+            "version": APP_VERSION,
+            "status": "running"
+        }
+    }
+
 # Authentication route
 @app.post("/token", response_model=schemas.Token)
 def login_for_access_token(db = Depends(get_db), username: str = Form(...), password: str = Form(...)):
@@ -58,3 +81,17 @@ def login_for_access_token(db = Depends(get_db), username: str = Form(...), pass
 # Include routers
 app.include_router(message_router, dependencies=[Depends(get_current_user)])
 app.include_router(user_router)
+
+# Startup and shutdown events
+@app.on_event("startup")
+async def startup_event():
+    """Initialize application on startup."""
+    logger.info(f"Starting {APP_NAME} v{APP_VERSION}")
+    logger.info("Database connection pool initialized")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Cleanup application on shutdown."""
+    logger.info("Shutting down application...")
+    close_db()
+    logger.info("Database connections closed")

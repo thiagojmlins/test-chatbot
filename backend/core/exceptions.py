@@ -27,10 +27,10 @@ class MessageNotFoundError(ChatbotException):
 class UserNotFoundError(ChatbotException):
     """Raised when a user is not found."""
     
-    def __init__(self, username: str):
+    def __init__(self, user_id: int):
         super().__init__(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"User '{username}' not found"
+            detail=f"User with id {user_id} not found"
         )
 
 
