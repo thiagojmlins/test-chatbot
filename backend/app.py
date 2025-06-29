@@ -1,8 +1,10 @@
 from logging import getLogger
-from fastapi import FastAPI, HTTPException, Depends, status, Form
+from fastapi import FastAPI, HTTPException, Depends, status, Form, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from core.auth import get_current_user
+from core.exceptions import ChatbotException
+from core.responses import handle_exception_response, internal_server_error_response
 from database import get_db, engine
 from services.auth import AuthService
 from routers.messages import router as message_router
@@ -31,12 +33,25 @@ app.add_middleware(
 )
 
 # Error handling
+@app.exception_handler(ChatbotException)
+async def chatbot_exception_handler(request: Request, exc: ChatbotException):
+    """Handle custom ChatbotException instances."""
+    return handle_exception_response(exc)
+
 @app.exception_handler(HTTPException)
-async def http_exception_handler(request, exc):
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle FastAPI HTTPException instances."""
     return JSONResponse(
         status_code=exc.status_code,
-        content={"message": exc.detail},
+        content={"error": {"message": exc.detail, "status_code": exc.status_code}},
+        headers=exc.headers
     )
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle all other exceptions."""
+    logger.error(f"Unhandled exception: {str(exc)}", exc_info=True)
+    return internal_server_error_response("An unexpected error occurred")
 
 # Authentication route
 @app.post("/token", response_model=schemas.Token)
