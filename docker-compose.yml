@@ -5,53 +5,92 @@ services:
     build: ./backend
     ports:
       - "8000:8000"
+    environment:
+      - DATABASE_HOST=db
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=chatbot
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=postgres
+      - SECRET_KEY=your-secret-key-here
+      - API_KEY=your-api-key-here
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CACHE_ENABLED=true
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
     volumes:
       - ./backend:/app
-    environment:
-      - SECRET_KEY=${SECRET_KEY}
-      - ALGORITHM=${ALGORITHM}
-      - ACCESS_TOKEN_EXPIRE_MINUTES=${ACCESS_TOKEN_EXPIRE_MINUTES}
-      - API_KEY=${API_KEY}
-      - API_MODEL=${API_MODEL}
-    depends_on:
-      db:
-        condition: service_healthy
-    command: uvicorn app:app --host 0.0.0.0 --port 8000 --reload
     networks:
-      - app-network
+      - chatbot-network
+
+  celery_worker:
+    build: ./backend
+    command: celery -A core.celery_app worker --loglevel=info
+    environment:
+      - DATABASE_HOST=db
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=chatbot
+      - DATABASE_USER=postgres
+      - DATABASE_PASSWORD=postgres
+      - SECRET_KEY=your-secret-key-here
+      - API_KEY=your-api-key-here
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - CACHE_ENABLED=true
+      - CELERY_BROKER_URL=redis://redis:6379/0
+      - CELERY_RESULT_BACKEND=redis://redis:6379/0
+    depends_on:
+      - backend
+      - redis
+    volumes:
+      - ./backend:/app
+    networks:
+      - chatbot-network
 
   frontend:
     build: ./frontend
     ports:
       - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
     volumes:
       - ./frontend:/app
       - /app/node_modules
-    depends_on:
-      - backend
-    command: npm run dev
     networks:
-      - app-network
+      - chatbot-network
 
   db:
-    image: postgres:13
+    image: postgres:15
     environment:
+      - POSTGRES_DB=chatbot
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=chatbot
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U postgres" ]
-      interval: 5s
-      timeout: 5s
-      retries: 5
     networks:
-      - app-network
+      - chatbot-network
 
-networks:
-  app-network:
-    driver: bridge
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - chatbot-network
+    command: redis-server --appendonly yes
 
 volumes:
   postgres_data:
+  redis_data:
+
+networks:
+  chatbot-network:
+    driver: bridge
