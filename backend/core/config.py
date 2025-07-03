@@ -26,6 +26,15 @@ if TESTING:
 else:
     SQLALCHEMY_DATABASE_URL = f"postgresql+psycopg://{DATABASE_USER}:{DATABASE_PASSWORD}@{DATABASE_HOST}:{DATABASE_PORT}/{DATABASE_NAME}"
 
+# Redis Configuration
+REDIS_HOST = os.getenv("REDIS_HOST", "redis")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
+REDIS_URL = os.getenv("REDIS_URL", f"redis://{REDIS_HOST}:{REDIS_PORT}/{REDIS_DB}")
+REDIS_TTL = int(os.getenv("REDIS_TTL", "300"))  # 5 minutes default
+CACHE_ENABLED = os.getenv("CACHE_ENABLED", "true").lower() == "true"
+
 # CORS Configuration
 CORS_ORIGINS: List[str] = [
     "http://localhost:5173",
@@ -51,6 +60,11 @@ DEBUG = os.getenv("DEBUG", "false").lower() == "true"
 # Server Configuration
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "8000"))
+
+# Performance Settings
+PAGINATION_DEFAULT_LIMIT = int(os.getenv("PAGINATION_DEFAULT_LIMIT", "20"))
+PAGINATION_MAX_LIMIT = int(os.getenv("PAGINATION_MAX_LIMIT", "100"))
+QUERY_TIMEOUT = int(os.getenv("QUERY_TIMEOUT", "30"))  # seconds
 
 # Validation
 def validate_config():

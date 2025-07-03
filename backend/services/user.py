@@ -5,11 +5,14 @@ from core.exceptions import UserAlreadyExistsError, UserNotFoundError
 import models, schemas
 from core.auth import get_password_hash, verify_password
 from database import DatabaseManager
+from core.cache import cache_manager, cache_invalidate
+from services.query import QueryService
 
 class UserService:
-    """Service for handling user operations with improved database management."""
+    """Service for handling user operations with improved database management and caching."""
     
     @staticmethod
+    @cache_invalidate("user:*")
     def create_new_user(db: Session, user: schemas.UserCreate) -> models.User:
         """
         Create a new user with validation and error handling.
@@ -26,9 +29,7 @@ class UserService:
         """
         def _create_user_operation():
             # Check if user already exists
-            existing_user = db.query(models.User).filter(
-                models.User.username == user.username
-            ).first()
+            existing_user = QueryService.get_user_by_username(db, user.username)
             
             if existing_user:
                 raise UserAlreadyExistsError(user.username)
@@ -51,7 +52,7 @@ class UserService:
     @staticmethod
     def get_user_by_id(db: Session, user_id: int) -> Optional[models.User]:
         """
-        Get a user by their ID.
+        Get a user by their ID with caching.
         
         Args:
             db: Database session
@@ -60,12 +61,12 @@ class UserService:
         Returns:
             User object or None if not found
         """
-        return db.query(models.User).filter(models.User.id == user_id).first()
+        return QueryService.get_user_by_id(db, user_id)
 
     @staticmethod
     def get_user_by_username(db: Session, username: str) -> Optional[models.User]:
         """
-        Get a user by their username.
+        Get a user by their username with caching.
         
         Args:
             db: Database session
@@ -74,7 +75,7 @@ class UserService:
         Returns:
             User object or None if not found
         """
-        return db.query(models.User).filter(models.User.username == username).first()
+        return QueryService.get_user_by_username(db, username)
 
     @staticmethod
     def authenticate_user(db: Session, username: str, password: str) -> Optional[models.User]:
@@ -99,6 +100,7 @@ class UserService:
         return user
 
     @staticmethod
+    @cache_invalidate("user:*")
     def update_user_password(db: Session, user_id: int, new_password: str) -> models.User:
         """
         Update a user's password.
@@ -128,6 +130,7 @@ class UserService:
         return DatabaseManager.execute_with_retry(_update_password_operation)
 
     @staticmethod
+    @cache_invalidate("user:*")
     def delete_user(db: Session, user_id: int) -> models.User:
         """
         Delete a user and all their associated data.
@@ -226,7 +229,7 @@ class UserService:
     @staticmethod
     def get_user_stats(db: Session, user_id: int) -> dict:
         """
-        Get statistics for a user.
+        Get statistics for a user with caching.
         
         Args:
             db: Database session
@@ -235,26 +238,19 @@ class UserService:
         Returns:
             Dictionary with user statistics
         """
-        from sqlalchemy import func
+        return QueryService.get_user_stats(db, user_id)
+
+    @staticmethod
+    def get_user_activity_summary(db: Session, user_id: int, days: int = 30) -> dict:
+        """
+        Get user activity summary for the last N days.
         
-        # Get message counts
-        total_messages = db.query(func.count(models.Message.id)).filter(
-            models.Message.user_id == user_id
-        ).scalar()
-        
-        user_messages = db.query(func.count(models.Message.id)).filter(
-            models.Message.user_id == user_id,
-            models.Message.is_from_user == True
-        ).scalar()
-        
-        bot_messages = db.query(func.count(models.Message.id)).filter(
-            models.Message.user_id == user_id,
-            models.Message.is_from_user == False
-        ).scalar()
-        
-        return {
-            "total_messages": total_messages or 0,
-            "user_messages": user_messages or 0,
-            "bot_messages": bot_messages or 0,
-            "conversations": user_messages or 0  # Each user message represents a conversation
-        } 
+        Args:
+            db: Database session
+            user_id: ID of the user
+            days: Number of days to analyze
+            
+        Returns:
+            Activity summary dictionary
+        """
+        return QueryService.get_user_activity_summary(db, user_id, days) 

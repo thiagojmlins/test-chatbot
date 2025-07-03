@@ -11,6 +11,14 @@ from services.auth import AuthService
 from routers.messages import router as message_router
 from routers.users import router as user_router
 import models, schemas
+from sqlalchemy.orm import Session
+from core.exceptions import setup_exception_handlers
+from core.middleware import setup_performance_middleware
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Initialize the database tables
 init_db()
@@ -18,11 +26,10 @@ init_db()
 app = FastAPI(
     title=APP_NAME,
     version=APP_VERSION,
-    description="A modern chatbot API with improved database management"
+    description="A high-performance chatbot API with caching and optimization"
 )
 
-logger = getLogger(__name__)
-
+# Setup CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
@@ -30,6 +37,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Setup performance monitoring middleware
+setup_performance_middleware(app)
+
+# Setup exception handlers
+setup_exception_handlers(app)
 
 # Error handling
 @app.exception_handler(ChatbotException)
@@ -55,21 +68,29 @@ async def general_exception_handler(request: Request, exc: Exception):
 # Health check endpoint
 @app.get("/health")
 async def health_check():
-    """Health check endpoint to verify API and database status."""
-    db_healthy = DatabaseManager.health_check()
-    connection_info = DatabaseManager.get_connection_info()
+    """Health check endpoint."""
+    return {
+        "status": "healthy",
+        "version": APP_VERSION,
+        "timestamp": "2024-01-01T00:00:00Z"
+    }
+
+@app.get("/api/v1/health")
+async def api_health_check(db: Session = Depends(get_db)):
+    """Detailed health check with database connectivity."""
+    try:
+        # Test database connection
+        db.execute("SELECT 1")
+        db_status = "healthy"
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+        db_status = "unhealthy"
     
     return {
-        "status": "healthy" if db_healthy else "unhealthy",
-        "database": {
-            "status": "connected" if db_healthy else "disconnected",
-            "connection_pool": connection_info
-        },
-        "api": {
-            "name": APP_NAME,
-            "version": APP_VERSION,
-            "status": "running"
-        }
+        "status": "healthy" if db_status == "healthy" else "unhealthy",
+        "database": db_status,
+        "version": APP_VERSION,
+        "timestamp": "2024-01-01T00:00:00Z"
     }
 
 # Authentication route
@@ -85,13 +106,14 @@ app.include_router(user_router)
 # Startup and shutdown events
 @app.on_event("startup")
 async def startup_event():
-    """Initialize application on startup."""
-    logger.info(f"Starting {APP_NAME} v{APP_VERSION}")
-    logger.info("Database connection pool initialized")
+    """Initialize database and other startup tasks."""
+    logger.info("Starting up the application...")
+    init_db()
+    logger.info("Application startup complete")
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Cleanup application on shutdown."""
-    logger.info("Shutting down application...")
+    """Cleanup on shutdown."""
+    logger.info("Shutting down the application...")
     close_db()
-    logger.info("Database connections closed")
+    logger.info("Application shutdown complete")

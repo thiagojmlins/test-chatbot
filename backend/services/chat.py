@@ -4,11 +4,15 @@ from sqlalchemy.exc import SQLAlchemyError
 from core.exceptions import MessageNotFoundError, ChatbotServiceError
 import models, chatbot
 from database import DatabaseManager
+from core.cache import cache_invalidate
+from services.query import QueryService
+from core.config import PAGINATION_DEFAULT_LIMIT, PAGINATION_MAX_LIMIT
 
 class ChatService:
-    """Service for handling chat operations with improved database management."""
+    """Service for handling chat operations with improved database management and caching."""
     
     @staticmethod
+    @cache_invalidate("messages:*")
     def create_message(db: Session, user_id: int, content: str) -> Tuple[models.Message, models.Message]:
         """
         Create a user message and generate a chatbot reply.
@@ -60,6 +64,7 @@ class ChatService:
         return DatabaseManager.execute_with_retry(_create_message_operation)
 
     @staticmethod
+    @cache_invalidate("messages:*")
     def delete_message(db: Session, user_id: int, message_id: int) -> models.Message:
         """
         Delete a message and its associated reply.
@@ -99,6 +104,7 @@ class ChatService:
         return DatabaseManager.execute_with_retry(_delete_message_operation)
 
     @staticmethod
+    @cache_invalidate("messages:*")
     def edit_message_and_update_reply(db: Session, user_id: int, message_id: int, new_content: str) -> Tuple[models.Message, models.Message]:
         """
         Edit a message and update its chatbot reply.
@@ -168,7 +174,7 @@ class ChatService:
         ).first()
 
     @staticmethod
-    def get_messages_paginated(db: Session, user_id: int, skip: int = 0, limit: int = 10) -> List[models.Message]:
+    def get_messages_paginated(db: Session, user_id: int, skip: int = 0, limit: int = PAGINATION_DEFAULT_LIMIT) -> Tuple[List[models.Message], int]:
         """
         Get paginated messages for a user with optimized querying.
         
@@ -179,14 +185,12 @@ class ChatService:
             limit: Maximum number of messages to return
             
         Returns:
-            List of messages ordered by creation time
+            Tuple of (messages, total_count)
         """
-        return db.query(models.Message).filter(
-            models.Message.user_id == user_id
-        ).order_by(models.Message.id.desc()).offset(skip).limit(limit).all()
+        return QueryService.get_messages_paginated_optimized(db, user_id, skip, limit)
 
     @staticmethod
-    def get_messages_with_replies(db: Session, user_id: int, skip: int = 0, limit: int = 10) -> List[models.Message]:
+    def get_messages_with_replies(db: Session, user_id: int, skip: int = 0, limit: int = PAGINATION_DEFAULT_LIMIT) -> List[models.Message]:
         """
         Get paginated messages with their replies using eager loading.
         
@@ -204,7 +208,7 @@ class ChatService:
             models.Message.is_from_user == True  # Only user messages
         ).options(
             joinedload(models.Message.replies)
-        ).order_by(models.Message.id.desc()).offset(skip).limit(limit).all()
+        ).order_by(models.Message.created_at.desc()).offset(skip).limit(limit).all()
 
     @staticmethod
     def create_reply(db: Session, content: str, message_id: int) -> models.Message:
@@ -255,9 +259,9 @@ class ChatService:
         ).count()
 
     @staticmethod
-    def search_messages(db: Session, user_id: int, search_term: str, limit: int = 10) -> List[models.Message]:
+    def search_messages(db: Session, user_id: int, search_term: str, limit: int = 20) -> List[models.Message]:
         """
-        Search messages by content for a specific user.
+        Search messages by content for a specific user with optimization.
         
         Args:
             db: Database session
@@ -268,7 +272,34 @@ class ChatService:
         Returns:
             List of messages matching the search term
         """
-        return db.query(models.Message).filter(
-            models.Message.user_id == user_id,
-            models.Message.content.ilike(f"%{search_term}%")
-        ).order_by(models.Message.id.desc()).limit(limit).all() 
+        return QueryService.search_messages_optimized(db, user_id, search_term, limit)
+
+    @staticmethod
+    def get_recent_conversations(db: Session, user_id: int, limit: int = 10) -> List[dict]:
+        """
+        Get recent conversations for a user.
+        
+        Args:
+            db: Database session
+            user_id: ID of the user
+            limit: Maximum number of conversations to return
+            
+        Returns:
+            List of recent conversations
+        """
+        return QueryService.get_recent_conversations(db, user_id, limit)
+
+    @staticmethod
+    def get_message_with_context(db: Session, message_id: int, context_size: int = 2) -> Optional[dict]:
+        """
+        Get a message with surrounding context.
+        
+        Args:
+            db: Database session
+            message_id: ID of the message
+            context_size: Number of messages before and after
+            
+        Returns:
+            Message with context or None if not found
+        """
+        return QueryService.get_message_with_context(db, message_id, context_size) 
